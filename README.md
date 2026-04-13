@@ -8,6 +8,7 @@ Scans `~/workspace` for stale projects and cleans up dependency directories (`no
 
 ```bash
 ws status                     # workspace summary
+ws status --detail            # workspace summary + project list
 ws clean --dry-run             # preview reclaimable space
 ws clean                       # clean with confirmation
 ws clean --months 3            # custom inactivity threshold
@@ -16,8 +17,10 @@ ws clean --months 3            # custom inactivity threshold
 ## Install
 
 ```bash
-ln -sf ~/workspace/tool/ws/ws ~/bin/ws
+curl -fsSL https://raw.githubusercontent.com/kangthink/ws/main/install.sh | bash
 ```
+
+This clones the repo to `~/.ws` and symlinks the CLI to `~/bin/ws`.
 
 ## What gets cleaned
 
