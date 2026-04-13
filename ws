@@ -127,6 +127,15 @@ git_status_label() {
 
 # ── Status Command ────────────────────────────────────────────────
 cmd_status() {
+  local detail=false
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --detail|-d) detail=true ;;
+      *) err "Unknown option: $1"; exit 1 ;;
+    esac
+    shift
+  done
+
   info "Scanning $WORKSPACE ..."
   echo ""
 
@@ -140,6 +149,7 @@ cmd_status() {
   local clean=0 dirty=0 behind=0 nogit=0
   local total_dep_size=0
   local -a categories=()
+  local -a project_lines=()
 
   while IFS= read -r project; do
     [[ -z "$project" ]] && continue
@@ -162,21 +172,35 @@ cmd_status() {
     # Activity
     local ts
     ts=$(last_activity_ts "$project")
+    local activity_label
     if [[ "$ts" -ge "$threshold_active" ]]; then
       active=$((active + 1))
+      activity_label="active"
     elif [[ "$ts" -ge "$threshold_inactive" ]]; then
       inactive=$((inactive + 1))
+      activity_label="inactive"
     else
       stale=$((stale + 1))
+      activity_label="stale"
     fi
 
     # Git status (skip fetch for status overview - too slow)
+    local git_label
     if [[ ! -d "$project/.git" ]]; then
       nogit=$((nogit + 1))
+      git_label="no-git"
     elif [[ -n "$(git -C "$project" status --porcelain 2>/dev/null)" ]]; then
       dirty=$((dirty + 1))
+      git_label="dirty"
     else
       clean=$((clean + 1))
+      git_label="clean"
+    fi
+
+    if [[ "$detail" == "true" ]]; then
+      local date_str
+      date_str=$(last_activity_date "$ts")
+      project_lines+=("${rel}|${activity_label}|${git_label}|${date_str}")
     fi
   done < <(find_projects)
 
@@ -231,6 +255,30 @@ cmd_status() {
 
   if [[ "$stale" -gt 0 ]]; then
     dim "  Tip: run 'ws clean --dry-run' to see reclaimable space"
+    echo ""
+  fi
+
+  # ── Detail: per-project list ──
+  if [[ "$detail" == "true" ]] && [[ ${#project_lines[@]} -gt 0 ]]; then
+    printf "  \033[1m── Projects ──\033[0m\n\n"
+    printf "  \033[0;90m%-35s %-10s %-8s %s\033[0m\n" "NAME" "ACTIVITY" "GIT" "LAST"
+    for line in "${project_lines[@]}"; do
+      IFS='|' read -r p_rel p_activity p_git p_date <<< "$line"
+      local color
+      case "$p_activity" in
+        active)   color="\033[1;32m" ;;
+        inactive) color="\033[1;33m" ;;
+        stale)    color="\033[0;90m" ;;
+      esac
+      local git_color
+      case "$p_git" in
+        dirty)  git_color="\033[1;33m" ;;
+        no-git) git_color="\033[0;90m" ;;
+        *)      git_color="\033[0m" ;;
+      esac
+      printf "  %-35s ${color}%-10s\033[0m ${git_color}%-8s\033[0m %s\n" \
+        "$p_rel" "$p_activity" "$p_git" "$p_date"
+    done
     echo ""
   fi
 }
@@ -382,7 +430,7 @@ usage() {
   echo "Usage: ws <command> [options]"
   echo ""
   echo "Commands:"
-  echo "  status                     Show workspace summary"
+  echo "  status [--detail|-d]       Show workspace summary (--detail: list projects)"
   echo "  clean [--months N] [--dry-run]  Clean stale project dependencies"
   echo ""
   echo "Options:"
